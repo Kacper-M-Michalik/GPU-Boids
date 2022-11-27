@@ -25,9 +25,9 @@ public class BoidManager : MonoBehaviour
     [SerializeField]
     float CollisionAvoidanceDistance = 2f;
     [SerializeField]
-    float MaxSpeed = 6f;
-    [SerializeField]
     float MinSpeed = 2f;
+    [SerializeField]
+    float MaxSpeed = 6f;    
     [SerializeField]
     float MaxSteerForce = 3f;
     [Space]
@@ -37,15 +37,18 @@ public class BoidManager : MonoBehaviour
     float FlockCenteringWeight = 1f;
     [SerializeField]
     float AlignmentWeight = 1f;
-
     //add angle variable
 
     const int GroupSize = 64;
     int KernelIndex;
+    ShaderParam Param;
 
+    [SerializeField]
+    bool ExtractData;
     public BoidData[] Boids; 
-    ComputeBuffer BoidInputBuffer;
-    ComputeBuffer BoidOutputBuffer;
+    ComputeBuffer BoidBuffer1;
+    ComputeBuffer BoidBuffer2;
+    bool IsBuffer1Input;
 
     uint[] Args;
     ComputeBuffer ArgsBuffer;
@@ -57,6 +60,7 @@ public class BoidManager : MonoBehaviour
     {
         Mesh = MeshBuilder.CreateRectangle(Vector3.zero, 1f, 1f);
         KernelIndex = MainBoidShader.FindKernel("CSMain");
+        Param = new ShaderParam();
 
         Args = new uint[5]; 
         Args[0] = (uint)Mesh.GetIndexCount(0);
@@ -75,26 +79,42 @@ public class BoidManager : MonoBehaviour
 
         if (Boids != null)
         {
-            BoidInputBuffer.SetData(Boids);
-            MainBoidShader.SetFloat("DeltaTime", Time.deltaTime);
-            MainBoidShader.SetFloat("MaxSpeed", MaxSpeed);
-            MainBoidShader.SetFloat("MinSpeed", MinSpeed);
-            MainBoidShader.SetFloat("MaxSteerForce", MaxSteerForce);
-            MainBoidShader.SetFloat("SqrCollisionAvoidanceDistance", CollisionAvoidanceDistance * CollisionAvoidanceDistance);
-            MainBoidShader.SetFloat("SqrFlockViewDistance", FlockViewDistance * FlockViewDistance);
-            MainBoidShader.SetFloat("CollisionAvoidanceWeight", CollisionAvoidanceWeight);
-            MainBoidShader.SetFloat("FlockCenteringWeight", FlockCenteringWeight);
-            MainBoidShader.SetFloat("AlignmentWeight", AlignmentWeight);
+            MainBoidShader.SetFloat(Param.DeltaTimeID, Time.deltaTime);
+            MainBoidShader.SetFloat(Param.MinSpeedID, MinSpeed);
+            MainBoidShader.SetFloat(Param.MaxSpeedID, MaxSpeed);
+            MainBoidShader.SetFloat(Param.MaxSteerForceID, MaxSteerForce);
+            MainBoidShader.SetFloat(Param.SqrCollisionAvoidanceDistanceID, CollisionAvoidanceDistance * CollisionAvoidanceDistance);
+            MainBoidShader.SetFloat(Param.SqrFlockViewDistanceID, FlockViewDistance * FlockViewDistance);
+            MainBoidShader.SetFloat(Param.CollisionAvoidanceWeightID, CollisionAvoidanceWeight);
+            MainBoidShader.SetFloat(Param.FlockCenteringWeightID, FlockCenteringWeight);
+            MainBoidShader.SetFloat(Param.AlignmentWeightID, AlignmentWeight);
 
             int Groups = Mathf.CeilToInt(Boids.Length / (float)GroupSize);
             MainBoidShader.Dispatch(KernelIndex, Groups, 1, 1);
 
-            //we should be doign somethign while gpu prcosses compute, move rendering here?
-
-            BoidOutputBuffer.GetData(Boids);
-
-            Graphics.DrawMeshInstancedIndirect(Mesh, 0, BoidMaterial, new Bounds(Vector3.zero, new Vector3(100f, 100f, 100f)), ArgsBuffer);
-        }
+            if (IsBuffer1Input)
+            {
+                MainBoidShader.SetBuffer(0, "InputBoids", BoidBuffer2);
+                MainBoidShader.SetBuffer(0, "OutputBoids", BoidBuffer1);
+                BoidMaterial.SetBuffer("BoidBuffer", BoidBuffer2);
+                IsBuffer1Input = false;
+            }
+            else
+            {
+                MainBoidShader.SetBuffer(0, "InputBoids", BoidBuffer1);
+                MainBoidShader.SetBuffer(0, "OutputBoids", BoidBuffer2);
+                BoidMaterial.SetBuffer("BoidBuffer", BoidBuffer1);
+                IsBuffer1Input = true;
+            }
+            
+            Graphics.DrawMeshInstancedIndirect(Mesh, 0, BoidMaterial, new Bounds(Vector3.zero, new Vector3(100f, 100f, 100f)), ArgsBuffer);     
+            
+            if (ExtractData)
+            {
+                if (!IsBuffer1Input) BoidBuffer2.GetData(Boids);
+                else BoidBuffer1.GetData(Boids);
+            }
+        }       
     }
     
     void GenerateBoids()
@@ -106,26 +126,53 @@ public class BoidManager : MonoBehaviour
             Boids[i] = new BoidData(new Vector3(Random.Range(-SpawnWidth / 2f, SpawnWidth / 2f), Random.Range(-SpawnHeight / 2f, SpawnHeight / 2f), 0f), new Vector3(Random.Range(-SpawnMaxSpeed, SpawnMaxSpeed), Random.Range(-SpawnMaxSpeed, SpawnMaxSpeed), 0f));
         }
 
-        if (BoidInputBuffer != null) BoidInputBuffer.Release();
-        if (BoidOutputBuffer != null) BoidOutputBuffer.Release();
-        BoidInputBuffer = new ComputeBuffer(Boids.Length, BoidData.Size());
-        BoidOutputBuffer = new ComputeBuffer(Boids.Length, BoidData.Size());
-        MainBoidShader.SetInt("BoidCount", Boids.Length);
-        
-        MainBoidShader.SetBuffer(0, "InputBoids", BoidInputBuffer);
-        MainBoidShader.SetBuffer(0, "OutputBoids", BoidOutputBuffer);
-        BoidMaterial.SetBuffer("BoidBuffer", BoidOutputBuffer);      
+        if (BoidBuffer1 != null) BoidBuffer1.Release();
+        if (BoidBuffer2 != null) BoidBuffer2.Release();
+        BoidBuffer1 = new ComputeBuffer(Boids.Length, BoidData.Size());
+        BoidBuffer2 = new ComputeBuffer(Boids.Length, BoidData.Size());
+
+        BoidBuffer1.SetData(Boids);
+        IsBuffer1Input = true;
+
+        MainBoidShader.SetInt("BoidCount", Boids.Length);        
+        MainBoidShader.SetBuffer(0, "InputBoids", BoidBuffer1);
+        MainBoidShader.SetBuffer(0, "OutputBoids", BoidBuffer2);
 
         //https://docs.unity3d.com/ScriptReference/Graphics.DrawMeshInstancedIndirect.html
         if (ArgsBuffer != null) ArgsBuffer.Release();
         ArgsBuffer = new ComputeBuffer(1, 5 * sizeof(uint), ComputeBufferType.IndirectArguments);
-
         Args[1] = (uint)BoidSimCount;
         ArgsBuffer.SetData(Args);
 
         PrevBoidCount = BoidSimCount;
     }
 
+}
+
+public class ShaderParam
+{
+    public int DeltaTimeID;
+    public int MinSpeedID;
+    public int MaxSpeedID;
+    public int MaxSteerForceID;
+    public int SqrCollisionAvoidanceDistanceID;
+    public int SqrFlockViewDistanceID;
+    public int CollisionAvoidanceWeightID;
+    public int FlockCenteringWeightID;
+    public int AlignmentWeightID;
+
+    public ShaderParam()
+    {
+        DeltaTimeID = Shader.PropertyToID("DeltaTime");
+        MinSpeedID = Shader.PropertyToID("MinSpeed");
+        MaxSpeedID = Shader.PropertyToID("MaxSpeed");
+        MaxSteerForceID = Shader.PropertyToID("MaxSteerForce");
+        SqrCollisionAvoidanceDistanceID = Shader.PropertyToID("SqrCollisionAvoidanceDistance");
+        SqrFlockViewDistanceID = Shader.PropertyToID("SqrFlockViewDistance");
+        CollisionAvoidanceWeightID = Shader.PropertyToID("CollisionAvoidanceWeight");
+        FlockCenteringWeightID = Shader.PropertyToID("FlockCenteringWeight");
+        AlignmentWeightID = Shader.PropertyToID("AlignmentWeight");
+    }
 }
 
 public struct BoidData
@@ -144,5 +191,22 @@ public struct BoidData
     public static int Size()
     {
         return sizeof(float) * 8;
+    }
+}
+
+public struct ObstacleData
+{
+    public Vector2 TopLeftBound;
+    public Vector2 BottomRightBound;
+
+    public ObstacleData(Vector2 SeTopLeftBound, Vector2 SetBottomRightBound)
+    {
+        TopLeftBound = SeTopLeftBound;
+        BottomRightBound = SetBottomRightBound;
+    }
+
+    public static int Size()
+    {
+        return sizeof(float) * 4;
     }
 }

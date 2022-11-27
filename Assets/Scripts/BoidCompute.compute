@@ -58,7 +58,6 @@ void CSMain (uint3 id : SV_DispatchThreadID)
             {
                 //add if for vision cone? calc using dot product
 
-                //maybe redo
                 //Repeat for all near boids _> (my pos - nearby collider force) * (1 / distance) (as dist bigger, weight smaller)
                 AvoidanceVector += Difference / (Difference.x * Difference.x + Difference.y * Difference.y);
             }
@@ -73,17 +72,16 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     }
 
 
-
     //Start calculations for new boid direction
     
-    FlockCenter = FlockCenter / ((float)NeighbourCount + epsilon);
-    FlockVelocity = FlockVelocity / ((float)NeighbourCount + epsilon);
+    FlockCenter = FlockCenter / (float(NeighbourCount) + epsilon);
+    FlockVelocity = FlockVelocity / (float(NeighbourCount) + epsilon);
 
     float3 AvoidanceForce = norm(AvoidanceVector) * MaxSpeed - InputBoids[id.x].Velocity;    
     float AvFMagnitude = sqrt(AvoidanceForce.x * AvoidanceForce.x + AvoidanceForce.y * AvoidanceForce.y);
     float ClampedAvFMagnitude = clamp(AvFMagnitude, 0, MaxSteerForce);  
         
-    float3 AlignmentForce = normalize(FlockVelocity) * MaxSpeed - InputBoids[id.x].Velocity;    
+    float3 AlignmentForce = norm(FlockVelocity) * MaxSpeed - InputBoids[id.x].Velocity;    
     float AlFMagnitude = sqrt(AlignmentForce.x * AlignmentForce.x + AlignmentForce.y * AlignmentForce.y);
     float ClampedAlFMagnitude = clamp(AlFMagnitude, 0, MaxSteerForce);  
 
@@ -94,16 +92,15 @@ void CSMain (uint3 id : SV_DispatchThreadID)
 
     float3 Acceleration = float3(0,0,0);
 
-    //figure out avodiance vector
     Acceleration += ((ClampedAvFMagnitude / (AvFMagnitude + epsilon)) * CollisionAvoidanceWeight) * AvoidanceForce;
     Acceleration += ((ClampedAlFMagnitude / (AlFMagnitude + epsilon)) * AlignmentWeight) * AlignmentForce;
     Acceleration += ((ClampedCFMagnitude / (CFMagnitude + epsilon)) * FlockCenteringWeight) * CenterForce; 
     //add randomness?
     //Acceleration +=  * rand(float2(DeltaTime, AvFMagnitude * Acceleration.y + ClampedFVMagnitude));
+
     //add world bound avodiance
     
     //Speed Clamping and Output
-
     float3 FinalVelocity = InputBoids[id.x].Velocity + Acceleration * DeltaTime; 
     float FVMagnitude = sqrt(FinalVelocity.x * FinalVelocity.x + FinalVelocity.y * FinalVelocity.y);
     float ClampedFVMagnitude = clamp(FVMagnitude, MinSpeed, MaxSpeed);   

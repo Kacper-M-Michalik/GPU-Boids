@@ -250,7 +250,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -490, y: -245.5}
+  m_AnchoredPosition: {x: -399.8, y: -248.9}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &943390234
@@ -396,6 +396,7 @@ MonoBehaviour:
   Follow: 0
   FollowBoidIndex: 0
   FramerateText: {fileID: 943390234}
+  FramesCounted: 10
 --- !u!1 &1012760134
 GameObject:
   m_ObjectHideFlags: 0

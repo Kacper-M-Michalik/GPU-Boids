@@ -17,9 +17,14 @@ public class CameraFollow : MonoBehaviour
     [SerializeField]
     Text FramerateText;
 
+    List<float> Framerates;
+    [SerializeField]
+    int FramesCounted = 10;
+
     // Start is called before the first frame update
     void Start()
     {
+        Framerates = new List<float>();
         if (Cam == null) Cam = GetComponent<Camera>();
     }
 
@@ -33,6 +38,17 @@ public class CameraFollow : MonoBehaviour
                 Cam.transform.position = new Vector3(Manager.Boids[FollowBoidIndex].Position.x, Manager.Boids[FollowBoidIndex].Position.y, Cam.transform.position.z);
             }
         }
-        FramerateText.text = Mathf.Round(1f / Time.deltaTime).ToString()+" FPS";
+        Framerates.Add(1 / Time.deltaTime);
+
+        if (Framerates.Count > FramesCounted) Framerates.RemoveAt(0);
+
+        float FinalFramerate = 0f;
+        for (int i = 0; i < Framerates.Count; i++)
+        {
+            FinalFramerate += Framerates[i];
+        }
+        FinalFramerate /= Framerates.Count;
+
+        FramerateText.text = Mathf.Round(FinalFramerate).ToString()+" FPS";
     }
 }
