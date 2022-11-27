@@ -575,18 +575,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   MainBoidShader: {fileID: 7200000, guid: b8a23fa040b1eba419ba33974068013f, type: 3}
   BoidMaterial: {fileID: 2100000, guid: 3c887933280147948a8425d08d59e4f6, type: 2}
-  BoidSimCount: 963
+  BoidSimCount: 2000
   SpawnWidth: 60
   SpawnHeight: 60
   SpawnMaxSpeed: 3.5
   FlockViewDistance: 2.5
   CollisionAvoidanceDistance: 1
-  MaxSpeed: 8
   MinSpeed: 5
+  MaxSpeed: 8
   MaxSteerForce: 8
   CollisionAvoidanceWeight: 2.5
   FlockCenteringWeight: 1
   AlignmentWeight: 2
+  ExtractData: 0
 --- !u!4 &1959090240
 Transform:
   m_ObjectHideFlags: 0
