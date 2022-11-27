@@ -1,0 +1,114 @@
+#pragma kernel CSMain
+
+static const int GroupSize = 64;
+static const float epsilon = 0.0001f;
+
+struct Boid 
+{
+    float3 Position;
+    float3 Velocity;
+    float2 Padding;
+};
+
+RWStructuredBuffer<Boid> InputBoids;
+RWStructuredBuffer<Boid> OutputBoids;
+uint BoidCount;
+float DeltaTime;
+
+float MaxSpeed;
+float MinSpeed;
+float MaxSteerForce;
+float SqrCollisionAvoidanceDistance;
+float SqrFlockViewDistance;
+//float WorldEdgeAvoidanceWeight;
+float CollisionAvoidanceWeight;
+float FlockCenteringWeight;
+float AlignmentWeight;
+
+//Returns value between 0 and 1
+float rand(float2 co)
+{
+    return frac(sin(dot(co, float2(12.9898f, 78.233f))) * 43758.5453f);
+}
+
+float3 norm(float3 input)
+{
+    float Magnitude = input.x * input.x + input.y * input.y;
+    return (1 / (sqrt(Magnitude) + epsilon)) * input;    
+}
+
+[numthreads(GroupSize, 1, 1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    float3 AvoidanceVector = float3(0, 0, 0);
+    float3 FlockVelocity = float3(0, 0, 0);
+    float3 FlockCenter = float3(0, 0, 0);
+    uint NeighbourCount = 0;
+
+    //Get flock data
+    for (uint BoidIndex = 0; BoidIndex < BoidCount; BoidIndex++)
+    {
+        if (BoidIndex != id.x)
+        {
+            float3 Difference = InputBoids[id.x].Position - InputBoids[BoidIndex].Position; 
+            float SqrDistance = Difference.x * Difference.x + Difference.y * Difference.y;
+
+            //Collision avoidance force
+            if (SqrDistance < SqrCollisionAvoidanceDistance)
+            {
+                //add if for vision cone? calc using dot product
+
+                //maybe redo
+                //Repeat for all near boids _> (my pos - nearby collider force) * (1 / distance) (as dist bigger, weight smaller)
+                AvoidanceVector += Difference / (Difference.x * Difference.x + Difference.y * Difference.y);
+            }
+            if (SqrDistance < SqrFlockViewDistance)
+            {
+                FlockCenter += InputBoids[BoidIndex].Position;
+                FlockVelocity += InputBoids[BoidIndex].Velocity;
+
+                NeighbourCount++;
+            }
+        }    
+    }
+
+
+
+    //Start calculations for new boid direction
+    
+    FlockCenter = FlockCenter / ((float)NeighbourCount + epsilon);
+    FlockVelocity = FlockVelocity / ((float)NeighbourCount + epsilon);
+
+    float3 AvoidanceForce = norm(AvoidanceVector) * MaxSpeed - InputBoids[id.x].Velocity;    
+    float AvFMagnitude = sqrt(AvoidanceForce.x * AvoidanceForce.x + AvoidanceForce.y * AvoidanceForce.y);
+    float ClampedAvFMagnitude = clamp(AvFMagnitude, 0, MaxSteerForce);  
+        
+    float3 AlignmentForce = normalize(FlockVelocity) * MaxSpeed - InputBoids[id.x].Velocity;    
+    float AlFMagnitude = sqrt(AlignmentForce.x * AlignmentForce.x + AlignmentForce.y * AlignmentForce.y);
+    float ClampedAlFMagnitude = clamp(AlFMagnitude, 0, MaxSteerForce);  
+
+    float3 CenterForce = norm(FlockCenter - InputBoids[id.x].Position) * MaxSpeed - InputBoids[id.x].Velocity;    
+    float CFMagnitude = sqrt(CenterForce.x * CenterForce.x + CenterForce.y * CenterForce.y);
+    float ClampedCFMagnitude = clamp(CFMagnitude, 0, MaxSteerForce);  
+    
+
+    float3 Acceleration = float3(0,0,0);
+
+    //figure out avodiance vector
+    Acceleration += ((ClampedAvFMagnitude / (AvFMagnitude + epsilon)) * CollisionAvoidanceWeight) * AvoidanceForce;
+    Acceleration += ((ClampedAlFMagnitude / (AlFMagnitude + epsilon)) * AlignmentWeight) * AlignmentForce;
+    Acceleration += ((ClampedCFMagnitude / (CFMagnitude + epsilon)) * FlockCenteringWeight) * CenterForce; 
+    //add randomness?
+    //Acceleration +=  * rand(float2(DeltaTime, AvFMagnitude * Acceleration.y + ClampedFVMagnitude));
+    //add world bound avodiance
+    
+    //Speed Clamping and Output
+
+    float3 FinalVelocity = InputBoids[id.x].Velocity + Acceleration * DeltaTime; 
+    float FVMagnitude = sqrt(FinalVelocity.x * FinalVelocity.x + FinalVelocity.y * FinalVelocity.y);
+    float ClampedFVMagnitude = clamp(FVMagnitude, MinSpeed, MaxSpeed);   
+
+    OutputBoids[id.x].Velocity = (ClampedFVMagnitude / (FVMagnitude + epsilon)) * FinalVelocity;
+    OutputBoids[id.x].Position = InputBoids[id.x].Position +  OutputBoids[id.x].Velocity * DeltaTime;
+
+}
