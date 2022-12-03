@@ -40,9 +40,9 @@ float3 norm(float3 input)
 [numthreads(GroupSize, 1, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-    float3 AvoidanceVector = float3(0, 0, 0);
-    float3 FlockVelocity = float3(0, 0, 0);
-    float3 FlockCenter = float3(0, 0, 0);
+    float3 AvoidanceVector;
+    float3 FlockVelocity;
+    float3 FlockCenter;
     uint NeighbourCount = 0;
 
     //Get flock data
